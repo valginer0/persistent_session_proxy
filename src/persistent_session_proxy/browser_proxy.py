@@ -7,8 +7,16 @@ import socket
 from typing import Dict, Optional
 import threading
 import select
+import logging
 from .proxy_session import ProxySession
 from .session_store import SessionStore
+
+# Set up logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 class PersistentSessionProxy(BaseHTTPRequestHandler):
     # Class-level session store
@@ -30,38 +38,47 @@ class PersistentSessionProxy(BaseHTTPRequestHandler):
             host, port = self.path.split(':')
             port = int(port)
             
+            logger.info(f"CONNECT request for {host}:{port}")
+            
             # Create a connection to the target server
+            logger.debug(f"Creating connection to {host}:{port}")
             target = socket.create_connection((host, port))
+            logger.debug(f"Connection established to {host}:{port}")
             
             # Send 200 Connection Established to the client
             self.send_response(200, 'Connection Established')
             self.end_headers()
+            logger.debug("Sent 200 Connection Established to client")
             
             # Create session for this host
             session = self._get_session(host)
+            logger.debug(f"Created/retrieved session for {host}")
             
             # Start forwarding data between client and target
             client = self.connection
             
-            def forward(source, destination):
+            def forward(source, destination, direction):
                 try:
                     while True:
                         data = source.recv(4096)
                         if not data:
                             break
                         destination.send(data)
-                except (ConnectionError, socket.error):
+                        logger.debug(f"{direction}: Forwarded {len(data)} bytes")
+                except (ConnectionError, socket.error) as e:
+                    logger.error(f"{direction}: Connection error - {str(e)}")
                     pass
                 
             # Create threads for bidirectional forwarding
             client_to_target = threading.Thread(
-                target=forward, args=(client, target))
+                target=forward, args=(client, target, "Client → Target"))
             target_to_client = threading.Thread(
-                target=forward, args=(target, client))
+                target=forward, args=(target, client, "Target → Client"))
             
             client_to_target.daemon = True
             target_to_client.daemon = True
             
+            logger.debug("Starting forwarding threads")
             client_to_target.start()
             target_to_client.start()
             
@@ -70,12 +87,16 @@ class PersistentSessionProxy(BaseHTTPRequestHandler):
                 client_to_target.join(0.1)
                 target_to_client.join(0.1)
             
+            logger.info(f"CONNECT tunnel closed for {host}:{port}")
+            
         except Exception as e:
+            logger.error(f"Error in CONNECT: {str(e)}")
             self.send_error(500, str(e))
             return
         finally:
             try:
                 target.close()
+                logger.debug(f"Closed connection to {host}:{port}")
             except:
                 pass
 
@@ -116,6 +137,7 @@ class PersistentSessionProxy(BaseHTTPRequestHandler):
             self.wfile.write(response.content)
             
         except Exception as e:
+            logger.error(f"Error in GET: {str(e)}")
             self.send_error(500, str(e))
 
     def do_POST(self):
@@ -158,6 +180,7 @@ class PersistentSessionProxy(BaseHTTPRequestHandler):
             self.wfile.write(response.content)
             
         except Exception as e:
+            logger.error(f"Error in POST: {str(e)}")
             self.send_error(500, str(e))
 
 
