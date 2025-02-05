@@ -163,11 +163,33 @@ class PersistentSessionProxy(BaseHTTPRequestHandler):
 
 def run_proxy(host: str = '0.0.0.0', port: int = 8080):
     """Run the proxy server."""
+    import signal
+    import sys
+
     server_address = (host, port)
     httpd = HTTPServer(server_address, PersistentSessionProxy)
+
+    def signal_handler(signum, frame):
+        print("\nShutting down proxy server...")
+        httpd.shutdown()
+        httpd.server_close()
+        sys.exit(0)
+
+    # Set up signal handlers
+    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler)  # Termination request
+
     print(f"Starting proxy server on {host}:{port}")
     print("To use this proxy:")
     print(f"1. Set your browser's proxy settings to {host}:{port}")
     print("2. Your sessions will be automatically persisted")
     print("3. If you restart your computer, just reconnect to the same proxy")
-    httpd.serve_forever()
+    print("Press Ctrl+C to stop the server")
+    
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down proxy server...")
+        httpd.shutdown()
+        httpd.server_close()
+        sys.exit(0)
