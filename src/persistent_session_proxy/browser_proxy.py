@@ -18,6 +18,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global shutdown flag
+is_shutting_down = threading.Event()
+
 class PersistentSessionProxy(BaseHTTPRequestHandler):
     # Class-level session store
     session_store = SessionStore()
@@ -33,6 +36,9 @@ class PersistentSessionProxy(BaseHTTPRequestHandler):
 
     def do_CONNECT(self):
         """Handle HTTPS CONNECT requests."""
+        if is_shutting_down.is_set():
+            return
+            
         try:
             # Get the target host and port
             host, port = self.path.split(':')
@@ -43,6 +49,7 @@ class PersistentSessionProxy(BaseHTTPRequestHandler):
             # Create a connection to the target server
             logger.debug(f"Creating connection to {host}:{port}")
             target = socket.create_connection((host, port))
+            target.settimeout(1)  # 1 second timeout
             logger.debug(f"Connection established to {host}:{port}")
             
             # Send 200 Connection Established to the client
@@ -56,18 +63,29 @@ class PersistentSessionProxy(BaseHTTPRequestHandler):
             
             # Start forwarding data between client and target
             client = self.connection
+            client.settimeout(1)  # 1 second timeout
             
             def forward(source, destination, direction):
                 try:
-                    while True:
-                        data = source.recv(4096)
-                        if not data:
+                    while not is_shutting_down.is_set():
+                        try:
+                            data = source.recv(4096)
+                            if not data:
+                                break
+                            destination.send(data)
+                            if not is_shutting_down.is_set():  # Only log if not shutting down
+                                logger.debug(f"{direction}: Forwarded {len(data)} bytes")
+                        except socket.timeout:
+                            continue
+                        except (ConnectionError, socket.error) as e:
+                            if not is_shutting_down.is_set():  # Only log if not shutting down
+                                logger.error(f"{direction}: Connection error - {str(e)}")
                             break
-                        destination.send(data)
-                        logger.debug(f"{direction}: Forwarded {len(data)} bytes")
-                except (ConnectionError, socket.error) as e:
-                    logger.error(f"{direction}: Connection error - {str(e)}")
-                    pass
+                finally:
+                    try:
+                        source.close()
+                    except:
+                        pass
                 
             # Create threads for bidirectional forwarding
             client_to_target = threading.Thread(
@@ -82,26 +100,34 @@ class PersistentSessionProxy(BaseHTTPRequestHandler):
             client_to_target.start()
             target_to_client.start()
             
-            # Wait for either thread to finish
-            while client_to_target.is_alive() and target_to_client.is_alive():
+            # Wait for either thread to finish or shutdown signal
+            while (client_to_target.is_alive() and 
+                   target_to_client.is_alive() and 
+                   not is_shutting_down.is_set()):
                 client_to_target.join(0.1)
                 target_to_client.join(0.1)
             
-            logger.info(f"CONNECT tunnel closed for {host}:{port}")
+            if not is_shutting_down.is_set():
+                logger.info(f"CONNECT tunnel closed for {host}:{port}")
             
         except Exception as e:
-            logger.error(f"Error in CONNECT: {str(e)}")
+            if not is_shutting_down.is_set():  # Only log if not shutting down
+                logger.error(f"Error in CONNECT: {str(e)}")
             self.send_error(500, str(e))
             return
         finally:
             try:
                 target.close()
-                logger.debug(f"Closed connection to {host}:{port}")
+                if not is_shutting_down.is_set():  # Only log if not shutting down
+                    logger.debug(f"Closed connection to {host}:{port}")
             except:
                 pass
 
     def do_GET(self):
         """Handle GET requests."""
+        if is_shutting_down.is_set():
+            return
+            
         try:
             # Parse the requested URL
             url = self.path
@@ -137,11 +163,15 @@ class PersistentSessionProxy(BaseHTTPRequestHandler):
             self.wfile.write(response.content)
             
         except Exception as e:
-            logger.error(f"Error in GET: {str(e)}")
+            if not is_shutting_down.is_set():  # Only log if not shutting down
+                logger.error(f"Error in GET: {str(e)}")
             self.send_error(500, str(e))
 
     def do_POST(self):
         """Handle POST requests."""
+        if is_shutting_down.is_set():
+            return
+            
         try:
             # Get content length
             content_length = int(self.headers.get('Content-Length', 0))
@@ -180,7 +210,8 @@ class PersistentSessionProxy(BaseHTTPRequestHandler):
             self.wfile.write(response.content)
             
         except Exception as e:
-            logger.error(f"Error in POST: {str(e)}")
+            if not is_shutting_down.is_set():  # Only log if not shutting down
+                logger.error(f"Error in POST: {str(e)}")
             self.send_error(500, str(e))
 
 
@@ -188,19 +219,25 @@ def run_proxy(host: str = '0.0.0.0', port: int = 8080):
     """Run the proxy server."""
     import signal
     import sys
+    import threading
+    import os
+    import atexit
+
+    # Reset shutdown flag
+    is_shutting_down.clear()
 
     server_address = (host, port)
     httpd = HTTPServer(server_address, PersistentSessionProxy)
+    httpd.timeout = 1  # Set socket timeout to 1 second
 
-    def signal_handler(signum, frame):
+    def force_shutdown(signum=None, frame=None):
         print("\nShutting down proxy server...")
-        httpd.shutdown()
-        httpd.server_close()
-        sys.exit(0)
+        os._exit(0)  # Force immediate exit
 
     # Set up signal handlers
-    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
-    signal.signal(signal.SIGTERM, signal_handler)  # Termination request
+    signal.signal(signal.SIGINT, force_shutdown)  # Ctrl+C
+    signal.signal(signal.SIGTERM, force_shutdown)  # Termination request
+    atexit.register(force_shutdown)  # Register for normal exit
 
     print(f"Starting proxy server on {host}:{port}")
     print("To use this proxy:")
@@ -212,7 +249,7 @@ def run_proxy(host: str = '0.0.0.0', port: int = 8080):
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nShutting down proxy server...")
-        httpd.shutdown()
-        httpd.server_close()
-        sys.exit(0)
+        force_shutdown()
+    except Exception as e:
+        logger.error(f"Server error: {e}")
+        force_shutdown()
