@@ -124,6 +124,27 @@ This helps test how the proxy handles various connection scenarios and server di
 
 Note: The proxy handles these disconnections gracefully as expected, demonstrating its robustness in real-world scenarios.
 
+## Development
+
+### Running Tests
+To run the tests, set your PYTHONPATH to include the src directory:
+
+```bash
+# Windows (Git Bash)
+export PYTHONPATH=src\;$PYTHONPATH
+pytest tests/
+
+# Windows (CMD)
+set PYTHONPATH=src;%PYTHONPATH%
+pytest tests/
+
+# Linux/Mac
+export PYTHONPATH=src:$PYTHONPATH
+pytest tests/
+```
+
+Note: Never use `pip install -e .` for development. Instead, use PYTHONPATH as shown above.
+
 ## Cloud Deployment Options
 
 For running the proxy in the cloud, these platforms offer good options:
