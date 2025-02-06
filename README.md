@@ -92,6 +92,19 @@ Sessions are stored in `~/.persistent_sessions/sessions.db` using SQLite. Each d
 - Only use on trusted networks and for trusted sites
 - Consider security implications before using with sensitive data
 
+## Session Persistence Testing
+
+The proxy has been successfully tested with GitHub:
+1. Start the proxy
+2. Configure browser to use localhost:8080
+3. Visit github.com and log in
+4. Close browser completely
+5. Open new browser
+6. Visit github.com
+7. Verify: Still logged in without re-authentication
+
+This demonstrates the proxy's ability to maintain session persistence across browser restarts, even with complex authentication systems involving 2FA.
+
 ## Troubleshooting
 
 1. HTTPS Not Working:
