@@ -3,6 +3,8 @@ from mitmproxy import ctx, http
 from mitmproxy.tools.main import mitmdump
 import sys
 import json
+import asyncio
+import platform
 from typing import Dict
 from .proxy_session import ProxySession
 from .session_store import SessionStore
@@ -72,8 +74,22 @@ class PersistentSessionInterceptor:
 # Required by mitmproxy for addon loading
 addons = [PersistentSessionInterceptor()]
 
+def handle_asyncio_exception(loop, context):
+    """Custom exception handler for asyncio errors."""
+    exc = context.get('exception')
+    if isinstance(exc, ConnectionResetError) and exc.winerror == 10054:
+        # This is a normal Windows connection reset, we can ignore it
+        return
+    # For other errors, use the default handler
+    loop.default_exception_handler(context)
+
 def run_proxy(host: str = '0.0.0.0', port: int = 8080):
     """Run the mitmproxy server."""
+    # Set up asyncio error handling for Windows
+    if platform.system() == 'Windows':
+        loop = asyncio.get_event_loop()
+        loop.set_exception_handler(handle_asyncio_exception)
+    
     # Build mitmdump arguments
     args = [
         '--listen-host', host,
