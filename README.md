@@ -35,49 +35,93 @@ By default, the proxy runs on `127.0.0.1:8080`. You can customize the host and p
 python run_proxy.py --host 127.0.0.1 --port 8888
 ```
 
-2. Configure your browser proxy:
-   - Open your browser's network/proxy settings
+2. Configure Browser Proxy Settings:
+   - Each browser needs its own proxy configuration:
+     - Chrome/Edge: Settings -> System -> Open your computer's proxy settings
+     - Firefox: Settings -> Network Settings -> Manual proxy configuration
    - Set HTTP Proxy (or just "Proxy") to `127.0.0.1:8080` (or your custom host:port)
    - Apply the settings
    - Note: This single proxy setting will handle both HTTP and HTTPS traffic
 
-3. First-time certificate setup:
-   - With proxy configured, visit any HTTPS website
-   - You'll see a security warning about the certificate
-   - Follow the browser's prompts to install mitmproxy's certificate
-   - This is a one-time setup required for HTTPS interception
-   - After installing the certificate, HTTPS sites will work normally
+3. Certificate Installation:
+   - When you first start the proxy, it automatically creates certificates in `%USERPROFILE%\.mitmproxy\`
+   
+   For Chrome/Edge (Windows):
+   - Option 1: Visit http://mitm.it through the proxy and follow browser prompts
+     - This might not work initially with some browsers due to HSTS
+   - Option 2: Manual Installation (recommended):
+     ```cmd
+     # Run in administrator command prompt
+     certutil -addstore root "%USERPROFILE%\.mitmproxy\mitmproxy-ca-cert.cer"
+     ```
+   
+   For Firefox:
+   - Firefox uses its own certificate store
+   - Visit http://mitm.it through the proxy
+   - Click the Firefox icon and follow the prompts
+   - Or manually: Settings -> Certificates -> View Certificates -> Import -> select `%USERPROFILE%\.mitmproxy\mitmproxy-ca-cert.cer`
+   
+   After installing the certificate:
+     1. Close all browser windows completely
+     2. Reopen browser with proxy settings enabled
+     3. HTTPS sites should now work without warnings
 
-Now all your web traffic (both HTTP and HTTPS) will go through the proxy and sessions will be automatically persisted.
+4. Testing the Setup:
+   - Visit any website requiring login
+   - Log in through the proxy
+   - Close the browser completely
+   - Reopen the browser (with proxy settings still enabled)
+   - Visit the same site - you should still be logged in
 
 ## How It Works
 
-The proxy uses mitmproxy to intercept HTTP/HTTPS traffic and:
-1. Stores cookies and form submissions in a SQLite database
-2. Automatically restores session state when revisiting sites
-3. Maintains separate sessions for different domains
-4. Persists all data in `~/.persistent_sessions/sessions.db`
+The proxy:
+1. Intercepts web traffic using mitmproxy
+2. Stores cookies and form data in a SQLite database
+3. Automatically restores sessions when you revisit sites
+4. Handles both HTTP and HTTPS traffic seamlessly
 
-## Development
+## Storage
 
-1. Clone the repository
-2. Install development dependencies:
-```bash
-pip install -r requirements.txt
-```
+Sessions are stored in `~/.persistent_sessions/sessions.db` using SQLite. Each domain gets its own session storage.
 
-3. Run tests:
-```bash
-pytest tests/
-```
+## Security Notes
 
-## Security Considerations
+- The proxy stores session data unencrypted in the SQLite database
+- The mitmproxy certificate allows the proxy to decrypt HTTPS traffic
+- Only use on trusted networks and for trusted sites
+- Consider security implications before using with sensitive data
 
-- The proxy can see all traffic (including HTTPS) - only use it on trusted networks
-- Session data is stored unencrypted in the SQLite database
-- Default configuration only listens on localhost for security
-- Use with caution on public networks
+## Troubleshooting
 
-## License
+1. HTTPS Not Working:
+   - Verify certificate installation
+   - Some sites with HSTS may require manual certificate installation
+   - Restart browser after certificate installation
 
-MIT License - see LICENSE file for details
+2. Session Not Persisting:
+   - Check if proxy is running
+   - Verify proxy settings in browser
+   - Ensure database directory is writable
+
+## Cloud Deployment Options
+
+For running the proxy in the cloud, these platforms offer good options:
+
+1. PythonAnywhere (Recommended)
+   - Specifically designed for Python applications
+   - Free tier available
+   - Hacker plan $5/month
+   - Built-in persistent storage
+   - Simple setup process
+
+2. Railway.app
+   - Free trial available
+   - Starts at $5/month
+   - Good for small projects
+   - Automatic GitHub deployments
+
+3. Fly.io
+   - Free tier available
+   - Pay-as-you-go pricing
+   - Global deployment options
