@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  proxy:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - proxy_data:/data
+    environment:
+      - PYTHONUNBUFFERED=1
+
+volumes:
+  proxy_data:
