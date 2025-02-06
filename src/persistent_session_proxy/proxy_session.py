@@ -1,9 +1,8 @@
 """Persistent proxy session implementation."""
 import uuid
-from typing import Dict, Optional, Any
+from typing import Dict, Optional
 import requests
 from .session_store import SessionStore
-
 
 class ProxySession:
     def __init__(self, session_id: Optional[str] = None, 
@@ -17,6 +16,8 @@ class ProxySession:
         self.session_id = session_id or str(uuid.uuid4())
         self.store = store or SessionStore()
         self.session = requests.Session()
+        self._last_form_data = {}
+        self._last_url = None
         
         # Restore session if it exists
         if session_id:
@@ -47,24 +48,6 @@ class ProxySession:
             self._last_url
         )
     
-    def get(self, url: str, **kwargs) -> requests.Response:
-        """Send GET request while maintaining session persistence."""
-        response = self.session.get(url, **kwargs)
-        self._last_url = url
-        self._save_session()
-        return response
-    
-    def post(self, url: str, data: Dict = None, **kwargs) -> requests.Response:
-        """Send POST request while maintaining session persistence."""
-        response = self.session.post(url, data=data, **kwargs)
-        self._last_url = url
-        self._save_session(form_data=data)
-        return response
-    
-    def submit_form(self, url: str, form_data: Dict) -> requests.Response:
-        """Submit form data to URL while maintaining session persistence."""
-        return self.post(url, data=form_data)
-    
     @property
     def cookies(self) -> Dict:
         """Get current session cookies."""
@@ -73,4 +56,4 @@ class ProxySession:
     @property
     def last_form_data(self) -> Dict:
         """Get last submitted form data."""
-        return self._last_form_data if hasattr(self, '_last_form_data') else {}
+        return self._last_form_data

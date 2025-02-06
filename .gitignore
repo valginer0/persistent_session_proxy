@@ -37,3 +37,10 @@ ENV/
 
 # Logs
 *.log
+
+# Project specific
+*.db
+.persistent_sessions/
+.mitmproxy/
+# mitmproxy certificates
+mitmproxy-ca-cert.*
