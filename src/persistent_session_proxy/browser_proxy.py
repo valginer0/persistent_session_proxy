@@ -21,27 +21,53 @@ class PersistentSessionInterceptor:
 
     def request(self, flow: http.HTTPFlow) -> None:
         """Process and modify requests to maintain session persistence."""
-        host = flow.request.pretty_host
-        session = self._get_session(host)
-        
-        # Apply session cookies
-        for cookie_name, cookie_value in session.cookies.items():
-            flow.request.cookies[cookie_name] = cookie_value
+        try:
+            host = flow.request.pretty_host
+            session = self._get_session(host)
             
-        # Handle POST form data
-        if flow.request.method == "POST" and flow.request.urlencoded_form:
-            session._save_session(form_data=dict(flow.request.urlencoded_form))
+            # Apply session cookies
+            for cookie_name, cookie_value in session.cookies.items():
+                flow.request.cookies[cookie_name] = cookie_value
+                
+            # Handle POST form data
+            if flow.request.method == "POST" and flow.request.urlencoded_form:
+                session._save_session(form_data=dict(flow.request.urlencoded_form))
+        except Exception as e:
+            ctx.log.warn(f"Error processing request: {str(e)}")
 
     def response(self, flow: http.HTTPFlow) -> None:
         """Process responses to maintain session persistence."""
-        host = flow.request.pretty_host
-        session = self._get_session(host)
-        
-        # Update session cookies from response
-        if flow.response.cookies:
-            for cookie_name, cookie_value in flow.response.cookies.items():
-                session.session.cookies.set(cookie_name, cookie_value[0])
-            session._save_session()
+        try:
+            host = flow.request.pretty_host
+            session = self._get_session(host)
+            
+            # Update session cookies from response
+            if flow.response.cookies:
+                for cookie_name, cookie_value in flow.response.cookies.items():
+                    session.session.cookies.set(cookie_name, cookie_value[0])
+                session._save_session()
+        except Exception as e:
+            ctx.log.warn(f"Error processing response: {str(e)}")
+
+    def error(self, flow: http.HTTPFlow) -> None:
+        """Handle any proxy errors gracefully."""
+        try:
+            if flow.error:
+                error_str = str(flow.error)
+                host = flow.request.pretty_host if flow.request else "unknown"
+                
+                # Identify error type
+                if any(x in error_str.lower() for x in ['connection reset', 'forcibly closed']):
+                    # Browser disconnected
+                    ctx.log.debug(f"Browser disconnected from {host} (normal behavior)")
+                elif any(x in error_str.lower() for x in ['timeout', 'connection refused', 'no route']):
+                    # Server-side issue
+                    ctx.log.error(f"Server connection issue with {host}: {error_str}")
+                else:
+                    # Unknown error
+                    ctx.log.error(f"Unknown error with {host}: {error_str}")
+        except Exception as e:
+            ctx.log.warn(f"Error in error handler: {str(e)}")
 
 # Required by mitmproxy for addon loading
 addons = [PersistentSessionInterceptor()]
@@ -53,6 +79,8 @@ def run_proxy(host: str = '0.0.0.0', port: int = 8080):
         '--listen-host', host,
         '--listen-port', str(port),
         '--quiet',  # Reduce console output
+        '--set', 'connection_strategy=lazy',  # More graceful connection handling
+        '--set', 'stream_large_bodies=1m',  # Better handling of large responses
     ]
     
     # Run mitmdump with our addon
@@ -60,3 +88,6 @@ def run_proxy(host: str = '0.0.0.0', port: int = 8080):
         mitmdump(args)
     except KeyboardInterrupt:
         sys.exit(0)
+    except Exception as e:
+        ctx.log.error(f"Proxy error: {str(e)}")
+        sys.exit(1)

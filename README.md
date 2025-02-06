@@ -104,6 +104,26 @@ Sessions are stored in `~/.persistent_sessions/sessions.db` using SQLite. Each d
    - Verify proxy settings in browser
    - Ensure database directory is writable
 
+## Testing Tools
+
+### Test Server
+The repository includes a test server (`test_server.py`) that helps test proxy behavior with different connection scenarios:
+
+```bash
+# Start the test server (runs on port 8081)
+python test_server.py
+```
+
+The test server will:
+1. Accept connections at `http://localhost:8081`
+2. Send initial "Connection established" message
+3. Wait 5 seconds
+4. Force disconnect the connection
+
+This helps test how the proxy handles various connection scenarios and server disconnections.
+
+Note: The proxy handles these disconnections gracefully as expected, demonstrating its robustness in real-world scenarios.
+
 ## Cloud Deployment Options
 
 For running the proxy in the cloud, these platforms offer good options:
