@@ -7,8 +7,10 @@ services:
       - "8080:8080"
     volumes:
       - proxy_data:/data
+      - mitmproxy_certs:/root/.mitmproxy  # Persistent certificate storage
     environment:
       - PYTHONUNBUFFERED=1
 
 volumes:
   proxy_data:
+  mitmproxy_certs:  # Named volume for certificates
