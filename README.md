@@ -23,6 +23,39 @@ A Python package that maintains web sessions across machine restarts using mitmp
 pip install -r requirements.txt
 ```
 
+## Docker Installation
+
+### Prerequisites
+- Docker
+- Docker Compose
+
+### Setup
+1. Clone the repository:
+```bash
+git clone https://github.com/valginer0/persistent_session_proxy.git
+cd persistent_session_proxy
+```
+
+2. Copy your existing mitmproxy certificates:
+```bash
+mkdir certs
+cp ~/.mitmproxy/mitmproxy-ca* certs/
+```
+
+3. Build and start the container:
+```bash
+docker-compose up -d
+```
+
+The proxy will be available at `localhost:8080`.
+
+### Docker Volumes
+The Docker setup uses two persistent volumes:
+- `proxy_data`: Stores the SQLite database with session data
+- `mitmproxy_certs`: Stores mitmproxy certificates
+
+These volumes ensure your data persists even if the container is removed and recreated.
+
 ## Usage
 
 1. Start the proxy server:
@@ -179,3 +212,51 @@ For running the proxy in the cloud, these platforms offer good options:
    - Free tier available
    - Pay-as-you-go pricing
    - Global deployment options
+   - **Supports Docker deployment**
+
+## Cloud Deployment (Fly.io)
+
+The proxy can be deployed to Fly.io for cloud access. The deployed version is available at `persistent-session-proxy.fly.dev:8080`.
+
+### Prerequisites
+1. Install [Fly.io CLI](https://fly.io/docs/hands-on/install-flyctl/)
+2. Sign up for Fly.io account: `flyctl auth signup`
+3. Login: `flyctl auth login`
+
+### Deployment Steps
+1. Clone this repository
+2. Navigate to the project directory
+3. Create a volume for persistent data:
+   ```bash
+   flyctl volumes create data --size 1
+   ```
+4. Deploy the application:
+   ```bash
+   flyctl deploy
+   ```
+
+### Using the Cloud Proxy
+
+1. Import the certificate:
+   - Open Chrome/Edge and go to `chrome://certificate-manager/clientcerts` (or `edge://certificate-manager/clientcerts`)
+   - Click "Import"
+   - Select the certificate file from `certs/mitmproxy-ca-cert.pem`
+   - Choose "Automatically select the certificate store based on the type of certificate"
+   - Accept any security warnings
+
+2. Configure your browser to use the proxy:
+   - Go to browser settings
+   - Search for "proxy"
+   - Open system proxy settings
+   - Set proxy server to:
+     - Address: `persistent-session-proxy.fly.dev`
+     - Port: `8080`
+
+3. Test the proxy by visiting any HTTPS website. Your sessions will persist even after browser restarts.
+
+### Features
+- Persistent session storage using mounted volume
+- Automatic HTTPS certificate handling
+- Auto-scaling with minimum 1 instance
+- 1GB RAM allocation
+- Accessible from anywhere

@@ -17,19 +17,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY run_proxy.py .
 
-# Set up mitmproxy certificates
-RUN mkdir -p /root/.mitmproxy /usr/local/share/ca-certificates
-COPY certs/mitmproxy-ca* /root/.mitmproxy/
+# Create directory for persistent data and certificates
+RUN mkdir -p /data/.mitmproxy
+VOLUME /data
+
+# Copy certificates to the persistent volume
+COPY certs/mitmproxy-ca* /data/.mitmproxy/
 
 # Install certificate into system store (Linux equivalent of 'certutil -addstore')
-# 1. Copy certificate to system certificate directory (like certutil)
-# 2. Update system certificate store (like certutil does automatically)
-RUN cp /root/.mitmproxy/mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/mitmproxy-ca.crt && \
+RUN cp /data/.mitmproxy/mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/mitmproxy-ca.crt && \
     update-ca-certificates
 
-# Create directory for persistent data
-RUN mkdir -p /data
-VOLUME /data
+# Set environment variable for mitmproxy to use the new certificate location
+ENV MITMPROXY_HOME=/data/.mitmproxy
 
 # Expose proxy port
 EXPOSE 8080
